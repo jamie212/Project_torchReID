@@ -1,7 +1,8 @@
 # Project_torchReID
 1. clone
-2. unzip deep-person-reid.zip
-3. download weight
+2. cd Project_torchReID/torchReID
+3. unzip deep-person-reid.zip
+4. download weight
    https://drive.google.com/file/d/1ZjnQIggA1m69Dq-9uzXD1YrQMyoDUt7r/view?usp=drive_link
 5. put it into deep_person_reid/log/resnext101/model/
 6. type in terminal : "conda env create -f environment.yml"
