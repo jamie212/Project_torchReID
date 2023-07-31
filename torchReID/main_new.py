@@ -124,10 +124,10 @@ def check_in_yolo(yolo_box, x_box):  # return True means detected by yolo --> no
     # print(yolo_box) 
     for box in yolo_box:
         z_box = [box[0], box[1], box[2]-box[0], box[3]-box[1]]
-        print('check covered : {}'.format(check_covered(z_box, x_box)))
+        # print('check covered : {}'.format(check_covered(z_box, x_box)))
         if check_covered(z_box, x_box) > 0.7:
-            print(f'yolo z: {z_box}')
-            print(f'inte x: {x_box}')
+            # print(f'yolo z: {z_box}')
+            # print(f'inte x: {x_box}')
             return True
     return False
 
@@ -338,7 +338,7 @@ def main(args):
 
             # create cost_matrix
             n, m = len(interest_bboxes), len(tracking_list)
-            print(f'interest: {n}, tracking: {m}')
+            # print(f'interest: {n}, tracking: {m}')
             
             if m == 0: # tracking list is empty
                 
@@ -373,20 +373,20 @@ def main(args):
 
                 for i, y_box in enumerate(interest_bboxes): 
                     need_update = True
-                    print(f'for y_box {i}')
+                    # print(f'for y_box {i}')
                     if match[i] == -1:        # y比x多，沒有配到x -> 新物體
                         wait_to_add = add_trackinglist(wait_to_add, y_box, current_frame_idx)
-                        print("no match, new item")
+                        # print("no match, new item")
                     else:                       # 有配到，檢查有沒有過三關
-                        print(f'y_box: {y_box}')
-                        print(f'match for y: {match[i]}')
-                        print(f'x_box: {tracking_list[match[i]]["bbox"]}')
-                        print(f'iou: {yh.iou(y_box, tracking_list[match[i]]["bbox"])}')
-                        print(f'sizediff: {check_sizediff(y_box, tracking_list[match[i]]["bbox"])}')
-                        print(f'similarity: {get_similarity(y_box, now_rgb_frame, tracking_list[match[i]]["bbox"], previous_rgb_frame)}')
+                        # print(f'y_box: {y_box}')
+                        # print(f'match for y: {match[i]}')
+                        # print(f'x_box: {tracking_list[match[i]]["bbox"]}')
+                        # print(f'iou: {yh.iou(y_box, tracking_list[match[i]]["bbox"])}')
+                        # print(f'sizediff: {check_sizediff(y_box, tracking_list[match[i]]["bbox"])}')
+                        # print(f'similarity: {get_similarity(y_box, now_rgb_frame, tracking_list[match[i]]["bbox"], previous_rgb_frame)}')
                         
                         if get_iou(y_box, tracking_list[match[i]]["bbox"]) > args.high_iou_th and get_similarity(y_box, now_rgb_frame, tracking_list[match[i]]["bbox"], previous_rgb_frame) > args.high_iou_simi_th:
-                            print("iou high enough, so similarity can be lower")
+                            # print("iou high enough, so similarity can be lower")
                             pass
 
                         elif (get_iou(y_box, tracking_list[match[i]]["bbox"]) < args.overlap_th) or check_sizediff(y_box, tracking_list[match[i]]["bbox"]) \
@@ -403,14 +403,14 @@ def main(args):
                                 continue
                             tracking_list[match[i]] = update_trackinglist(tracking_list[match[i]], y_box)
                             # check the updated box is garbage or not
-                            print(f'duration: {tracking_list[match[i]]["duration"]}')
-                            print(f'move: {tracking_list[match[i]]["moved_dist"]}')
+                            # print(f'duration: {tracking_list[match[i]]["duration"]}')
+                            # print(f'move: {tracking_list[match[i]]["moved_dist"]}')
 
                             if tracking_list[match[i]]["duration"] > args.stay_up_th and tracking_list[match[i]]["moved_dist"] < args.moved_th:
                                 tracking_list[match[i]]["check_yolo_cnt"] += 1
                                 yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[current_frame_idx]}")
                                 if check_in_yolo(yolo_bbox, tracking_list[match[i]]["bbox"]) == False:
-                                    print("not in yolo")
+                                    # print("not in yolo")
                                     tracking_list[match[i]]["not_in_yolo"] += 1
 
                                 if tracking_list[match[i]]["check_yolo_cnt"] == 3:
@@ -422,26 +422,26 @@ def main(args):
                                             check_yolo_idx = tracking_list[match[i]]["frame_idx"] - t
                                             if check_yolo_idx < 0:
                                                 check_yolo_idx = 0
-                                            print(check_yolo_idx)
+                                            # print(check_yolo_idx)
                                             pre_yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[check_yolo_idx]}")
                                             
                                             if check_in_yolo(pre_yolo_bbox, tracking_list[match[i]]["appear_bbox"]) == True:
-                                                print('in checking old yolo:')
-                                                print(pre_yolo_bbox)
-                                                print(tracking_list[match[i]]["bbox"])
-                                                print('old is in yolo')
+                                                # print('in checking old yolo:')
+                                                # print(pre_yolo_bbox)
+                                                # print(tracking_list[match[i]]["bbox"])
+                                                # print('old is in yolo')
                                                 was_in_yolo += 1
-                                            else:
-                                                print("old not in yolo")
-                                                print(pre_yolo_bbox)
-                                                print(tracking_list[match[i]]["bbox"])
+                                            # else:
+                                                # print("old not in yolo")
+                                                # print(pre_yolo_bbox)
+                                                # print(tracking_list[match[i]]["bbox"])
                                         if was_in_yolo < 4 :
                                             tracking_list[match[i]]["is_garbage"] = True
                                             tracking_list[match[i]]["state"] = -2
-                                            print(tracking_list[match[i]]["state"])
-                                            print("is garbage")
+                                            # print(tracking_list[match[i]]["state"])
+                                            # print("is garbage")
                                         else:
-                                            print("is ghost")
+                                            # print("is ghost")
                                             tracking_list[match[i]]["duration"] = 0
                                         
 
@@ -477,7 +477,7 @@ def main(args):
                     cover_area = check_covered(tracking_list[z_idx]["bbox"], tracking_list[x_idx]["bbox"])
                     # print(f'area: {cover_area}')
                     if cover_area > args.covered_th:
-                        print(f"z: {z_idx} is cover by x: {x_idx}")
+                        # print(f"z: {z_idx} is cover by x: {x_idx}")
                         tracking_list[z_idx]["be_covered"] += 1
                         z["state"] = -1
                         be_covered = True
