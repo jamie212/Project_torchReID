@@ -207,7 +207,7 @@ def main(args):
                 └ video_n
     '''
     # path2input, path2mask_videos, path2yolo_bbox_folders = "./our_datum_0516/input", "./our_datum_0516/tmp/videos", "./our_datum_0516/tmp/npys"
-    path2input, path2mask_videos, path2yolo_bbox_folders = "./datum_0724/input", "./datum_0724/tmp/videos", "./datum_0724/tmp/npys"
+    path2input, path2mask_videos, path2yolo_bbox_folders = "./our_datum/input", "./our_datum/tmp/videos", "./our_datum/tmp/npys"
 
     if not os.path.exists(path2input): 
         print(f"Fail to get any input. Kill the process.")
@@ -266,7 +266,7 @@ def main(args):
         if not video_idx in videos_need_process : continue       
 
         # 設定輸出資料夾
-        path2output = f"./datum_0724/output/{video_idx}"
+        path2output = f"./our_datum/output/{video_idx}"
 
         # path2output = f"./datum_0711/output/{video_idx}"
         if not os.path.exists(f"{path2output}/mask"): os.makedirs(f"{path2output}/mask")
