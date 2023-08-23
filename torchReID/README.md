@@ -5,7 +5,7 @@
 4. download weight
    https://drive.google.com/file/d/1ZjnQIggA1m69Dq-9uzXD1YrQMyoDUt7r/view?usp=drive_link
 5. put it into deep_person_reid/log/resnext101/model/
-6. type in terminal : "conda env create -f environment.yml"
+6. type in terminal : "conda env create -f environment.yml" and activate
 7. download data
    https://drive.google.com/file/d/1dNxl7A_IyddBqgTY99arQ_odAepiE0tE/view?usp=drive_link
    (put this in same folder with main_func.py)
