@@ -37,6 +37,7 @@ def get_similarity(box1, box1_rgb, box2, box2_rgb):
     transform = transforms.Compose([
         transforms.ToTensor()
     ])
+
     ul, lr = yh.dilate_bbox(box1, height, width)
     y_cropped_img = box1_rgb[ul[1]:lr[1], ul[0]:lr[0]]
 
@@ -52,10 +53,8 @@ def get_similarity(box1, box1_rgb, box2, box2_rgb):
 
     features = extractor(image_list)
     features = features.cpu()
- 
+
     sim_score = cos_sim(features[0],features[1])
-    # tensor_y_cropped_img, tensor_x_cropped_img = transform(y_cropped_img).unsqueeze(0), transform(x_cropped_img).unsqueeze(0)
-    # sim_score = similarity(tensor_y_cropped_img, tensor_x_cropped_img, model)
 
     return sim_score
 
@@ -97,7 +96,7 @@ def check_yolo_covered(z_box, x_box):
     min_area = min((z_box[2] * z_box[3]), (x_box[2] * x_box[3]))
 
     return overlap_area / min_area
-    # return overlap_area / z_box[2] * z_box[3]
+
 
 def check_in_yolo(yolo_box, x_box):  # return True means detected by yolo --> not garbage / False --> maybe garbage
     for box in yolo_box:
@@ -106,13 +105,18 @@ def check_in_yolo(yolo_box, x_box):  # return True means detected by yolo --> no
             return max((z_box[2]*z_box[3]), (x_box[2]*x_box[3])) / min((z_box[2]*z_box[3]), (x_box[2]*x_box[3])) 
     return 0
 
-def check_coverby_yolo(yolo_box, x_box):
-    for box in yolo_box:
-        z_box = [box[0], box[1], box[2]-box[0], box[3]-box[1]]
-        if check_covered(z_box, x_box) >= 0.9 :
+def check_coverby_delcc(delcc_box, x_box):
+    for box in delcc_box:
+        if check_covered(x_box, box) > 0.9 :
             return True
     return False
     
+def check_in_coverbyyolo(cover_by_yolo, x_box):
+    for box in cover_by_yolo:
+        z_box = box["bbox"]
+        if check_covered(x_box, z_box) > 0.9 :
+            return True
+    return False
 
 def add_trackinglist(wait_to_add, y_box, current_frame_idx):
     tmp = {
@@ -128,9 +132,6 @@ def add_trackinglist(wait_to_add, y_box, current_frame_idx):
         "not_in_yolo" : 0,
         "be_covered" : 0, 
         "appear_bbox" : y_box
-        # "exist": True,
-        # "not_moving_cnt" : 0, 
-        # "vanish_counter": 0
     }
     wait_to_add.append(tmp)
     return wait_to_add
@@ -144,8 +145,6 @@ def update_trackinglist(trackinglist_info, y_box):
     trackinglist_info["state"] = 1
     trackinglist_info["no_pair_counter"] = 0
     trackinglist_info["be_covered"] = 0
-    # trackinglist_info["exist"] = True
-    # trackinglist_info["vanish_counter"] = 0
 
     return trackinglist_info
 
@@ -187,7 +186,7 @@ def main(args):
             - ...
     '''
     path2datum = './our_datum'
-    path2input, path2mask_videos, path2yolo_bbox_folders, path2cc_bbox_folders = path2datum + "/input", path2datum + "/tmp/videos", path2datum + "/tmp/yolo_npys", path2datum + "/tmp/cc_npys"
+    path2input, path2mask_videos, path2yolo_bbox_folders, path2cc_bbox_folders, path2delcc_bbox_folders = path2datum + "/input", path2datum + "/tmp/videos", path2datum + "/tmp/yolo_npys", path2datum + "/tmp/cc_npys", path2datum + "/tmp/del_cc_npys"
 
     if not os.path.exists(path2input): 
         print(f"Fail to get any input. Kill the process.")
@@ -206,10 +205,11 @@ def main(args):
         os._exit(0)
 
     rgb_videos, mask_videos, yolo_bbox_folders, cc_bbox_folders = natsorted(os.listdir(path2input)), natsorted(os.listdir(path2mask_videos)), natsorted(os.listdir(path2yolo_bbox_folders)), natsorted(os.listdir(path2cc_bbox_folders))
+    delcc_bbox_folders = natsorted(os.listdir(path2delcc_bbox_folders))
 
     # Draw bbox
     # 線的厚度, 類型
-    thickness, lineType, font = 2, 4, cv2.FONT_HERSHEY_SIMPLEX
+    # thickness, lineType, font = 2, 4, cv2.FONT_HERSHEY_SIMPLEX
 
     # 影片每幀Resize長寬
     # resize_width, resize_height = 960, 540
@@ -230,7 +230,7 @@ def main(args):
 
     need_append = len(rgb_videos) - len(videos_range)
     if need_append<0:
-        # print(f"The playback time of the video is set incorrectly. Kill the process.")
+        print(f"The playback time of the video is set incorrectly. Kill the process.")
         os._exit(0)
     elif need_append>0:
         for idx in range(need_append): videos_range.append((0, 0))
@@ -241,29 +241,17 @@ def main(args):
         # 設定哪幾部影片要處理
         if not video_idx in videos_need_process : continue       
 
-        # 設定輸出資料夾
-        path2output = path2datum + "/output/" + str(video_idx)
-
-        # path2output = f"./datum_0711/output/{video_idx}"
-        # if not os.path.exists(f"{path2output}/mask"): os.makedirs(f"{path2output}/mask")
-        # if not os.path.exists(f"{path2output}/rgb"): os.makedirs(f"{path2output}/rgb")
-
         # 讀取影片
         rgb_video, mask_video = f"{path2input}/{rgb_videos[video_idx]}", f"{path2mask_videos}/{mask_videos[video_idx]}"
         rgb_cap = cv2.VideoCapture(rgb_video) # 彩色影片，讀取彩幀用
-        # mask_cap = cv2.VideoCapture(mask_video)
 
         # 檢查是否成功打開影片
         if not rgb_cap.isOpened(): 
             print(f"Fail to open: {rgb_video}. Kill the process.")
             os._exit(0)
-        # if not mask_cap.isOpened(): 
-        #     print(f"Fail to open: {mask_video}. Kill the process.")
-        #     os._exit(0)
 
         # 取得幀數, 影片長寬
         total_frames = int( rgb_cap.get(cv2.CAP_PROP_FRAME_COUNT) )
-        # width, height = int( rgb_cap.get(cv2.CAP_PROP_FRAME_WIDTH) ), int( rgb_cap.get(cv2.CAP_PROP_FRAME_HEIGHT) )
 
         # 設定yolo_bbox路徑        
         path2video_yolo_bbox = f"{path2yolo_bbox_folders}/{yolo_bbox_folders[video_idx]}"
@@ -272,6 +260,9 @@ def main(args):
         # 設定cc_bbox路徑        
         path2video_cc_bbox = f"{path2cc_bbox_folders}/{cc_bbox_folders[video_idx]}"
         cc_bboxs = natsorted(os.listdir(path2video_cc_bbox))
+
+        path2video_delcc_bbox = f"{path2delcc_bbox_folders}/{delcc_bbox_folders[video_idx]}"
+        delcc_bboxs = natsorted(os.listdir(path2video_delcc_bbox))
 
         # 初始化上一幀
         previous_rgb_frame = None
@@ -288,54 +279,40 @@ def main(args):
             print(f"video_start of {video} is set incorrectly. Kill the process.")
             os._exit(0)
         
-        # video_start, video_end = 10438, 10915
-        
-        # print(f"Processing video: {video_idx}")
-        # print(f"Total frames: {total_frames}")
-        # print('Current frame:')
+        print(f"Processing video: {video_idx}")
+        print(f"Total frames: {total_frames}")
+        print('Current frame:')
         max_len_trackinglist = 0
 
         for current_frame_idx in range(total_frames):
             print(current_frame_idx)
             
             rgb_rval, now_rgb_frame = rgb_cap.read()  # 拍攝的彩色圖片
-            # mask_rval, mask = mask_cap.read() # mask_processed
 
             # 如果讀取失敗，程式終止
             if not rgb_rval: 
                 print(f"Fail to read the {current_frame_idx} frame of {rgb_video}. Kill the process.")
                 os._exit(0)
-            # if not mask_rval: 
-            #     print(f"Fail to read the {current_frame_idx} frame of {mask_video}. Kill the process.")
-            #     os._exit(0)
 
             # 播放範圍
             if current_frame_idx<video_start: continue
             if current_frame_idx>video_end: break
 
             interest_bboxes = np.load(f"{path2video_cc_bbox}/{cc_bboxs[current_frame_idx]}")
+            del_interest_bboxed = np.load(f"{path2video_delcc_bbox}/{delcc_bboxs[current_frame_idx]}")
+           
+            for idx in reversed(range(len(tracking_list))):
+                x = tracking_list[idx]
+                if check_coverby_delcc(del_interest_bboxed, x["bbox"]) == True:
+                    if check_in_coverbyyolo(cover_by_yolo, x["bbox"]) == False:
+                        cover_by_yolo.append(x)
+                    del tracking_list[idx]
 
-            # 每一幀Resize, 灰階, 二值化 etc.
-            # now_rgb_frame, denoise_mask, interest_bboxes = yh.img_processing_update(now_rgb_frame, mask, resize_width, resize_height)
-            
-            ##### new #####
-            # yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[current_frame_idx]}")
-            # wait_to_add_tlist = []
-            # wait_to_add_cbyolo = []
-            # for idx, x in enumerate(tracking_list):  
-            #     if check_coverby_yolo(yolo_bbox, x["bbox"]) == True:
-            #         wait_to_add_cbyolo.append(idx)
-            # for idx, y in enumerate(cover_by_yolo):  
-            #     if check_coverby_yolo(yolo_bbox, y["bbox"]) == False:
-            #         wait_to_add_tlist.append(idx)
-            # for idx in wait_to_add_cbyolo[::-1]:
-            #     cover_by_yolo.append(tracking_list[idx])
-            #     del tracking_list[idx]
-            # for idx in wait_to_add_tlist[::-1]:
-            #     tracking_list.append(cover_by_yolo[idx])
-            #     del cover_by_yolo[idx]
-
-            ###############
+            for idx in reversed(range(len(cover_by_yolo))):
+                y = cover_by_yolo[idx]
+                if check_coverby_delcc(del_interest_bboxed, y["bbox"]) == False:
+                    tracking_list.append(y)
+                    del cover_by_yolo[idx]
             
             wait_to_add = [] # wait_to_add 用來儲存加入清單之物體
 
@@ -343,7 +320,6 @@ def main(args):
 
             # create cost_matrix
             n, m , k= len(interest_bboxes), len(tracking_list), len(cover_by_yolo)
-            # print(f'interest: {n}, tracking: {m}, cover by yolo: {k}')
             
             if m == 0: # tracking list is empty
                 
@@ -353,7 +329,6 @@ def main(args):
             elif m != 0 and n != 0:
                 cost_matrix = np.zeros((n, m))
                 for i, y_box in enumerate(interest_bboxes): # y
-                    # print(y_box)
                     y_area = y_box[2]*y_box[3]
                     
                     for j, x_box in enumerate(tracking_list):    # x
@@ -378,20 +353,10 @@ def main(args):
 
                 for i, y_box in enumerate(interest_bboxes): 
                     need_update = True
-                    # print(f'for y_box {i}')
                     if match[i] == -1:        # y比x多，沒有配到x -> 新物體
                         wait_to_add = add_trackinglist(wait_to_add, y_box, current_frame_idx)
-                        # print("no match, new item")
                     else:                       # 有配到，檢查有沒有過三關
-                        # print(f'y_box: {y_box}')
-                        # print(f'match for y: {match[i]}')
-                        # print(f'x_box: {tracking_list[match[i]]["bbox"]}')
-                        # print(f'iou: {yh.iou(y_box, tracking_list[match[i]]["bbox"])}')
-                        # print(f'sizediff: {check_sizediff(y_box, tracking_list[match[i]]["bbox"])}')
-                        # print(f'similarity: {get_similarity(y_box, now_rgb_frame, tracking_list[match[i]]["bbox"], previous_rgb_frame)}')
-                        
                         if get_iou(y_box, tracking_list[match[i]]["bbox"]) > args.high_iou_th and get_similarity(y_box, now_rgb_frame, tracking_list[match[i]]["bbox"], previous_rgb_frame) > args.high_iou_simi_th:
-                            # print("iou high enough, so similarity can be lower")
                             pass
 
                         elif (get_iou(y_box, tracking_list[match[i]]["bbox"]) < args.overlap_th) or check_sizediff(y_box, tracking_list[match[i]]["bbox"]) \
@@ -407,59 +372,27 @@ def main(args):
                             if tracking_list[match[i]]["state"] == -2:
                                 continue
                             tracking_list[match[i]] = update_trackinglist(tracking_list[match[i]], y_box)
-                            # check the updated box is garbage or not
-                            # print(f'duration: {tracking_list[match[i]]["duration"]}')
-                            # print(f'move: {tracking_list[match[i]]["moved_dist"]}')
 
                             if tracking_list[match[i]]["duration"] >= args.stay_up_th and tracking_list[match[i]]["moved_dist"] < args.moved_th:
-                                # tracking_list[match[i]]["check_yolo_cnt"] += 1
-                                # yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[current_frame_idx]}")
-                                # if check_in_yolo(yolo_bbox, tracking_list[match[i]]["bbox"]) == False:
-                                    # print("not in yolo")
-                                    # tracking_list[match[i]]["not_in_yolo"] += 1
-
-                                # if tracking_list[match[i]]["check_yolo_cnt"] == 3:
-                                    # if tracking_list[match[i]]["not_in_yolo"] >= 2:
-                                        # maybe garbage or ghost, check the previous yolo box before appear using appear bbox
                                 was_in_yolo = 0
                                 for t in check_yolo_for_ghost:
-                                    # check_yolo_idx = current_frame_idx - tracking_list[match[i]]["not_moving_cnt"] + t
                                     check_yolo_idx = tracking_list[match[i]]["frame_idx"] - t
                                     if check_yolo_idx < 0:
                                         check_yolo_idx = 0
-                                    # print(check_yolo_idx)
+ 
                                     pre_yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[check_yolo_idx]}")
                                     
-                                    # if (check_in_yolo(pre_yolo_bbox, tracking_list[match[i]]["appear_bbox"]) == True) and (sizediff_with_yolo(pre_yolo_bbox, tracking_list[match[i]]["appear_bbox"]) < args.sizedff_yolo_th):
                                     sizediff_with_yolo = check_in_yolo(pre_yolo_bbox, tracking_list[match[i]]["appear_bbox"]) # if == 0 : not in yolo, else is in yolo and return size diff
                                     if sizediff_with_yolo > 0 and sizediff_with_yolo < args.sizediff_yolo_th:
-
-                                        # print('in checking old yolo:')
-                                        # print(pre_yolo_bbox)
-                                        # print(tracking_list[match[i]]["bbox"])
-                                        # print('old is in yolo')
                                         was_in_yolo += 1
-                                    # else:
-                                    #     print("old not in yolo")
-                                    #     print(pre_yolo_bbox)
-                                    #     print(tracking_list[match[i]]["bbox"])
+
                                 if was_in_yolo >= 4 :
-                                    # print("is ghost")
                                     tracking_list[match[i]]["duration"] = 0
             
                                 else:
-                                    # print("is garbage")
+                                    print("garbage/{}".format(tracking_list[match[i]]["frame_idx"]))
                                     tracking_list[match[i]]["is_garbage"] = True
                                     tracking_list[match[i]]["state"] = -2
-                                    print(f'garbage {tracking_list[match[i]]["frame_idx"]}')
-                                            # print(tracking_list[match[i]]["state"])
-                                            
-            
-                                    # elif tracking_list[match[i]]["not_in_yolo"] == 0:
-                                    #     tracking_list[match[i]]["duration"] = 0
-
-                                    # tracking_list[match[i]]["check_yolo_cnt"] = 0
-                                    # tracking_list[match[i]]["not_in_yolo"] = 0
           
                             if tracking_list[match[i]]["duration"] > args.stay_up_th / 2:
                                 tracking_list[match[i]]["moved_dist"] = 0
@@ -478,7 +411,7 @@ def main(args):
                 z["state"] = 1
                 # 篩掉那些被覆蓋住的
                 be_covered = False
-                ############
+
                 ### covered by other tracking box
                 for x_idx, x in enumerate(tracking_list):
                     if x_idx == z_idx:
@@ -487,42 +420,20 @@ def main(args):
                         continue
                    
                     cover_area = check_covered(z["bbox"], x["bbox"])
-                    # print(f'area: {cover_area}')
                     if cover_area > args.covered_th:
-                        # print(f"z: {z_idx} is cover by x: {x_idx}")
                         z["be_covered"] += 1
                         z["state"] = -1
                         be_covered = True
                         break
-                ### covered by yolo box
-                # if not be_covered:
-                #     yolo_bbox = np.load(f"{path2video_yolo_bbox}/{yolo_bboxs[current_frame_idx]}")
-                #     if check_in_yolo(yolo_bbox, z["bbox"]) > 0:
-                #         z["be_covered"] += 1
-                #         z["state"] = -3
-                #         be_covered = True
-                #         # print('cover by yolo')
-                    
 
                 if be_covered and z["be_covered"] < args.be_covered_time_th:
                     continue
-                ############
+
                 z["no_pair_counter"] += 1
                 if z["no_pair_counter"] >= args.delete_cnt and not z["is_garbage"]:  # 連續delete_cnt幀沒配到前景，且非垃圾，刪除
                     remove_idx.append(z_idx)
                     continue
     
-                # 這邊的x可能是 1.本來tracking_list比較長所以沒有配到y,  2.有配到但是沒有過門檻 --> 跟前一幀的同位子比相似度
-                # sim_score = get_similarity(z["bbox"], now_rgb_frame, z["bbox"], previous_rgb_frame)
-
-                # if sim_score >= config['similarity_th']:
-                #     print('no forground, no match, but still same with pre rgb frame')
-                #     z["exist"] = True
-                #     z["vanish_counter"] = 0
-                #     z["duration"] += 1
-                #     z["state"] = 1
-
-
                 if z["is_garbage"] == True:
                     z["state"] = -2
 
@@ -540,39 +451,11 @@ def main(args):
             # 設置上一幀
             previous_rgb_frame = now_rgb_frame.copy()
 
-            # ----------Draw bbox---------- #
-            # for tracking_obj in tracking_list:
-
-            #     if tracking_obj["state"] == 1: # 追蹤中(red)
-            #         color = (0, 0, 255) # bgr
-            #     elif tracking_obj["state"] == 0: # 剛進(green)
-            #         color = (0, 255, 0)
-            #     elif tracking_obj["state"] == -1: # 被interestbox擋住(yellow)
-            #         color = (0 , 255, 255)
-            #     elif tracking_obj["state"] == -2: # 垃圾(blue)
-            #         color = (255, 0, 0)
-            #     # elif tracking_obj["state"] == -3: # 被yolobox擋住(light blue)
-            #     #     color = (255, 255, 0)
-
-            #     tmp_bbox = tracking_obj["bbox"]
-            #     cv2.rectangle(mask, (tmp_bbox[0], tmp_bbox[1]), (tmp_bbox[0]+tmp_bbox[2]-1, tmp_bbox[1]+tmp_bbox[3]-1), color, thickness, lineType)
-            #     cv2.rectangle(now_rgb_frame, (tmp_bbox[0], tmp_bbox[1]), (tmp_bbox[0]+tmp_bbox[2]-1, tmp_bbox[1]+tmp_bbox[3]-1), color, thickness, lineType)
-            # for obj in cover_by_yolo:
-            #     color = (255, 255, 0)
-            #     tmp_bbox = obj["bbox"]
-            #     cv2.rectangle(mask, (tmp_bbox[0], tmp_bbox[1]), (tmp_bbox[0]+tmp_bbox[2]-1, tmp_bbox[1]+tmp_bbox[3]-1), color, thickness, lineType)
-            #     cv2.rectangle(now_rgb_frame, (tmp_bbox[0], tmp_bbox[1]), (tmp_bbox[0]+tmp_bbox[2]-1, tmp_bbox[1]+tmp_bbox[3]-1), color, thickness, lineType)
-
-            # cv2.imwrite(f"{path2output}/mask/{current_frame_idx}.png", mask)
-            # cv2.imwrite(f"{path2output}/rgb/{current_frame_idx}.png", now_rgb_frame)
-            # ----------------------------- #
-                
-            # print(f"Current frame: {current_frame_idx}, TrackingList Size is: {len(tracking_list)}")    
-            # max_len_trackinglist = max(max_len_trackinglist, len(tracking_list))         
+            if len(tracking_list) >= args.reset_cnt: 
+                print("Too many box, reset tracking list")
+                tracking_list.clear()      
 
         rgb_cap.release()
-        # mask_cap.release()
-        # print('maxlen : {}'.format(max_len_trackinglist))
 
 if __name__ == "__main__":
     args = parse_arguments()
