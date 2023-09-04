@@ -7,11 +7,11 @@
 5. put it into deep_person_reid/log/resnext101/model/
 6. type in terminal : "conda env create -f environment.yml" and activate
 7. download data
-   https://drive.google.com/file/d/1dNxl7A_IyddBqgTY99arQ_odAepiE0tE/view?usp=drive_link
+   https://drive.google.com/file/d/1ctquZHe5gLyZzFzMxQZCqpWMZ3t1gE-3/view?usp=drive_link
    (put this in same folder with main_func.py)
-8. step 9~12 if you want to use your data
-9. put original video input in our_datum/input/
-10. put yolo npy folder in our_datum/tmp/yolo_npys/
-11. put yconected component npy folder in our_datum/tmp/cc_npys/
-12. put preprocessed video in our_datum/tmp/videos/
-13. run python main_new.py
+step 8~11 if you want to use your data
+8. put original video input in our_datum/input/
+9. put yolo npy folder in our_datum/tmp/yolo_npys/
+10. put conected component npy folder in our_datum/tmp/cc_npys/
+11. put deleted conected component npy folder in our_datum/tmp/del_cc_npys/
+12. run python main_new.py
