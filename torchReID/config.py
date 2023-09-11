@@ -11,5 +11,7 @@ def parse_arguments():
     parser.add_argument('--covered_th', type=float, default=0.8, help='被覆蓋的面積佔自己的比例超過此閥值認定為被覆蓋')
     parser.add_argument('--moved_th', type=int, default=200, help='累積移動量超過此閥值不會是垃圾')
     parser.add_argument('--be_covered_time_th', type=int, default=300, help='累積被覆蓋了幀數超過此閥值，會被更新/刪掉')
+    parser.add_argument('--reset_cnt', type=int, default=30, help='le of tracking list達到此數字，清空')
+
 
     return parser.parse_args()
